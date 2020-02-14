@@ -1,0 +1,3 @@
+python-telegram-bot
+ibm_watson
+python-dotenv
