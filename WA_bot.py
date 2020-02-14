@@ -6,6 +6,7 @@ from telegram.ext import CommandHandler
 from telegram.ext import MessageHandler, Filters
 from telegram.ext import Updater
 from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
+from ibm_cloud_sdk_core.api_exception import ApiException
 
 load_dotenv()
 assistant_id = os.getenv('ASSISTANT_ID')
@@ -23,10 +24,17 @@ service = ibm_watson.AssistantV2(
 
 service.set_service_url(os.getenv('URL'))
 
-users = {}
+session_ids = {}
 
 updater = Updater(token=os.getenv('TOKEN'), use_context=True)
 dispatcher = updater.dispatcher
+
+
+def new_session(user_id):
+    assistant_session_id = service.create_session(
+        assistant_id=assistant_id
+    ).get_result()['session_id']
+    session_ids[user_id] = assistant_session_id
 
 
 def start(update, context):
@@ -34,7 +42,7 @@ def start(update, context):
     assistant_session_id = service.create_session(
         assistant_id=assistant_id
     ).get_result()['session_id']
-    users[user_id] = assistant_session_id
+    session_ids[user_id] = assistant_session_id
     response = service.message(
         assistant_id,
         assistant_session_id
@@ -63,16 +71,18 @@ def help_user(update, context):
 
 def wa_reply(update, context):
     user_id = update.message.from_user.id
-    if user_id not in users:
-        assistant_session_id = service.create_session(
-            assistant_id=assistant_id
-        ).get_result()['session_id']
-        users[user_id] = assistant_session_id
-    response = service.message(
-        assistant_id,
-        users[user_id],
-        input={'text': update.message.text}
-    ).get_result()
+    if user_id not in session_ids:
+        new_session(user_id)
+    try:
+        response = service.message(
+            assistant_id,
+            session_ids[user_id],
+            input={'text': update.message.text}
+        ).get_result()
+    except ApiException:
+        new_session(user_id)
+        response = service.message(assistant_id, session_ids[user_id], input={'text': update.message.text})
+
     logger.debug(response)
     reply_text = ''
     try:
