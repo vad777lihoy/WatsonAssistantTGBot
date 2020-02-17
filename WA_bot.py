@@ -1,6 +1,7 @@
 import os
 import logging
 import ibm_watson
+from functools import wraps
 from dotenv import load_dotenv
 from telegram.ext import CommandHandler
 from telegram.ext import MessageHandler, Filters
@@ -31,6 +32,18 @@ updater = Updater(token=os.getenv('TOKEN'), use_context=True)
 dispatcher = updater.dispatcher
 
 
+def send_action(action):
+    def decorator(func):
+        @wraps(func)
+        def command_func(update, context, *args, **kwargs):
+            context.bot.send_chat_action(chat_id=update.effective_message.chat_id, action=action)
+            return func(update, context, *args, **kwargs)
+
+        return command_func
+
+    return decorator
+
+
 def new_session(user_id):
     assistant_session_id = service.create_session(
         assistant_id=assistant_id
@@ -38,6 +51,7 @@ def new_session(user_id):
     session_ids[user_id] = assistant_session_id
 
 
+@send_action
 def start(update, context):
     user_id = update.message.from_user.id
     assistant_session_id = service.create_session(
@@ -58,6 +72,7 @@ def start(update, context):
     context.bot.send_message(chat_id=update.effective_chat.id, text='Помощь: /help')
 
 
+@send_action
 def help_user(update, context):
     help_message = """
     Команды бота:
@@ -71,6 +86,7 @@ def help_user(update, context):
     context.bot.send_message(chat_id=update.effective_chat.id, text=help_message)
 
 
+@send_action
 def wa_reply(update, context):
     start_message = False
     user_id = update.message.from_user.id
