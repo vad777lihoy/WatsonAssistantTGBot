@@ -84,7 +84,7 @@ def wa_reply(update, context):
         ).get_result()
     except ApiException:
         new_session(user_id)
-        response = service.message(assistant_id, session_ids[user_id], input={'text': update.message.text})
+        response = service.message(assistant_id, session_ids[user_id], input={'text': update.message.text}).get_result()
 
     logger.debug(response)
     reply_text = ''
