@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from telegram.ext import CommandHandler
 from telegram.ext import MessageHandler, Filters
 from telegram.ext import Updater
+from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove
 from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
 from ibm_cloud_sdk_core.api_exception import ApiException
 
@@ -52,7 +53,8 @@ def start(update, context):
         reply_text = response['output']['generic'][0]['text']
     except IndexError:
         reply_text = 'Watson Assistant is unavailable now :('
-    context.bot.send_message(chat_id=update.effective_chat.id, text=reply_text)
+    reply_markup = ReplyKeyboardRemove()
+    context.bot.send_message(chat_id=update.effective_chat.id, text=reply_text, reply_markup=reply_markup)
     context.bot.send_message(chat_id=update.effective_chat.id, text='Помощь: /help')
 
 
@@ -70,6 +72,7 @@ def help_user(update, context):
 
 
 def wa_reply(update, context):
+    start_message = False
     user_id = update.message.from_user.id
     if user_id not in session_ids:
         new_session(user_id)
@@ -85,16 +88,28 @@ def wa_reply(update, context):
 
     logger.debug(response)
     reply_text = ''
+    labels = []
+    button_list = []
     try:
         if response['output']['generic'][0]['response_type'] == 'text':
             for line in response['output']['generic']:
+                if line['text'].startswith('Я хочу предложить'):
+                    start_message = True
                 reply_text += line['text'] + '\n'
         elif response['output']['generic'][0]['title']:
             reply_text = response['output']['generic'][0]['title']
+            for option in response['output']['generic'][0]['options']:
+                labels.append(option['label'])
+            button_list = [[s] for s in labels]
+
     except IndexError:
         reply_text = 'Watson Assistant is unavailable now :('
 
-    context.bot.send_message(chat_id=update.effective_chat.id, text=reply_text)
+    if len(button_list) > 0:
+        reply_markup = ReplyKeyboardMarkup(button_list)
+    else:
+        reply_markup = ReplyKeyboardRemove()
+    context.bot.send_message(chat_id=update.effective_chat.id, text=reply_text, reply_markup=reply_markup)
 
 
 def unknown(update, context):
