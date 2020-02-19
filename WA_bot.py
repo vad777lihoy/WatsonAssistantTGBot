@@ -7,6 +7,7 @@ from telegram.ext import CommandHandler
 from telegram.ext import MessageHandler, Filters
 from telegram.ext import Updater
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram.chataction import ChatAction
 from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
 from ibm_cloud_sdk_core.api_exception import ApiException
 
@@ -51,7 +52,7 @@ def new_session(user_id):
     session_ids[user_id] = assistant_session_id
 
 
-@send_action
+@send_action(ChatAction.TYPING)
 def start(update, context):
     user_id = update.message.from_user.id
     assistant_session_id = service.create_session(
@@ -72,7 +73,7 @@ def start(update, context):
     context.bot.send_message(chat_id=update.effective_chat.id, text='Помощь: /help')
 
 
-@send_action
+@send_action(ChatAction.TYPING)
 def help_user(update, context):
     help_message = """
     Команды бота:
@@ -86,9 +87,8 @@ def help_user(update, context):
     context.bot.send_message(chat_id=update.effective_chat.id, text=help_message)
 
 
-@send_action
+@send_action(ChatAction.TYPING)
 def wa_reply(update, context):
-    start_message = False
     user_id = update.message.from_user.id
     if user_id not in session_ids:
         new_session(user_id)
@@ -107,19 +107,29 @@ def wa_reply(update, context):
     labels = []
     button_list = []
     try:
-        if response['output']['generic'][0]['response_type'] == 'text':
-            for line in response['output']['generic']:
-                if line['text'].startswith('Я хочу предложить'):
-                    start_message = True
-                reply_text += line['text'] + '\n'
-        elif response['output']['generic'][0]['title']:
-            reply_text = response['output']['generic'][0]['title']
-            for option in response['output']['generic'][0]['options']:
-                labels.append(option['label'])
-            button_list = [[s] for s in labels]
+
+        for response_part in response['output']['generic']:
+            if response_part['response_type'] == 'text':
+                reply_text += response_part['text'] + '\n'
+            elif response_part['response_type'] == 'option':
+                reply_text += response_part['title']
+                labels = [option['label'] for option in response_part['options']]
+
+        button_list = [[s] for s in labels]
+
+        # if response['output']['generic'][0]['response_type'] == 'text':
+        #     for line in response['output']['generic']:
+        #         reply_text += line['text'] + '\n'
+        # elif response['output']['generic'][0]['title']:
+        #     reply_text = response['output']['generic'][0]['title']
+        #     for option in response['output']['generic'][0]['options']:
+        #         labels.append(option['label'])
+        #     button_list = [[s] for s in labels]
 
     except IndexError:
         reply_text = 'Watson Assistant is unavailable now :('
+    except KeyError:
+        reply_text = 'Ошибка обработки текста'
 
     if len(button_list) > 0:
         reply_markup = ReplyKeyboardMarkup(button_list)
