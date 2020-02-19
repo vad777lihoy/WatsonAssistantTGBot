@@ -1,6 +1,8 @@
 import os
 import logging
 import ibm_watson
+import pycbrf
+import datetime
 from functools import wraps
 from dotenv import load_dotenv
 from telegram.ext import CommandHandler
@@ -87,6 +89,17 @@ def help_user(update, context):
     context.bot.send_message(chat_id=update.effective_chat.id, text=help_message)
 
 
+def get_rate(wa_response):
+    rate = ''
+    today_date = datetime.date.today()
+    if 'entities' in wa_response['output'] and len(wa_response['output']['entities']) > 0:
+        if wa_response['output']['entities'][0]['value'] == 'Доллар':
+            rate = str(pycbrf.ExchangeRates(today_date)['USD'].rate) + ' RUB -> 1 '
+        elif wa_response['output']['entities'][0]['value'] == 'Евро':
+            rate = str(pycbrf.ExchangeRates(today_date)['EUR'].rate) + ' RUB -> 1 '
+    return rate
+
+
 @send_action(ChatAction.TYPING)
 def wa_reply(update, context):
     user_id = update.message.from_user.id
@@ -107,7 +120,11 @@ def wa_reply(update, context):
     labels = []
     button_list = []
     try:
-
+        # if 'intents' in response['output']:
+        #     if response['output']['intents'][0]['intent'] == '02':
+        #         reply_text += str(pycbrf.ExchangeRates('2020-02-18')['USD'].rate)
+        #         # break
+        reply_text += get_rate(response)
         for response_part in response['output']['generic']:
             if response_part['response_type'] == 'text':
                 reply_text += response_part['text'] + '\n'
