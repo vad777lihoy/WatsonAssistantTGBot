@@ -1,8 +1,6 @@
 import os
 import logging
 import ibm_watson
-import pycbrf
-import datetime
 from functools import wraps
 from dotenv import load_dotenv
 from telegram.ext import CommandHandler
@@ -57,13 +55,10 @@ def new_session(user_id):
 @send_action(ChatAction.TYPING)
 def start(update, context):
     user_id = update.message.from_user.id
-    assistant_session_id = service.create_session(
-        assistant_id=assistant_id
-    ).get_result()['session_id']
-    session_ids[user_id] = assistant_session_id
+    new_session(user_id)
     response = service.message(
         assistant_id,
-        assistant_session_id
+        session_ids[user_id]
     ).get_result()
     reply_text = ''
     try:
@@ -82,22 +77,9 @@ def help_user(update, context):
     Помощь: /help
     Начало диалога: /start\n
     
-    После отправки команды /start создается сессия с Watson Assistant.
-    Сессия существует 5 минут, поэтому  после разговора для нового разговора необходимо ввести команду /start
-    Исправление в разработке.
+    После отправки команды /start создается новая сессия с Watson Assistant.
     """
     context.bot.send_message(chat_id=update.effective_chat.id, text=help_message)
-
-
-def get_rate(wa_response):
-    rate = ''
-    today_date = datetime.date.today()
-    if 'entities' in wa_response['output'] and len(wa_response['output']['entities']) > 0:
-        if wa_response['output']['entities'][0]['value'] == 'Доллар':
-            rate = str(pycbrf.ExchangeRates(today_date)['USD'].rate) + ' RUB -> 1 '
-        elif wa_response['output']['entities'][0]['value'] == 'Евро':
-            rate = str(pycbrf.ExchangeRates(today_date)['EUR'].rate) + ' RUB -> 1 '
-    return rate
 
 
 @send_action(ChatAction.TYPING)
@@ -120,11 +102,6 @@ def wa_reply(update, context):
     labels = []
     button_list = []
     try:
-        # if 'intents' in response['output']:
-        #     if response['output']['intents'][0]['intent'] == '02':
-        #         reply_text += str(pycbrf.ExchangeRates('2020-02-18')['USD'].rate)
-        #         # break
-        reply_text += get_rate(response)
         for response_part in response['output']['generic']:
             if response_part['response_type'] == 'text':
                 reply_text += response_part['text'] + '\n'
@@ -133,16 +110,6 @@ def wa_reply(update, context):
                 labels = [option['label'] for option in response_part['options']]
 
         button_list = [[s] for s in labels]
-
-        # if response['output']['generic'][0]['response_type'] == 'text':
-        #     for line in response['output']['generic']:
-        #         reply_text += line['text'] + '\n'
-        # elif response['output']['generic'][0]['title']:
-        #     reply_text = response['output']['generic'][0]['title']
-        #     for option in response['output']['generic'][0]['options']:
-        #         labels.append(option['label'])
-        #     button_list = [[s] for s in labels]
-
     except IndexError:
         reply_text = 'Watson Assistant is unavailable now :('
     except KeyError:
@@ -172,4 +139,3 @@ message_handler = MessageHandler(Filters.text, wa_reply)
 dispatcher.add_handler(message_handler)
 
 updater.start_polling()
-# updater.idle()
