@@ -1,7 +1,7 @@
 # WatsonAssistantTGBot
 Simple telegram bot with integrated IBM Watson Assistant
 
-##Commands
+## Commands
 ```
  ibmcloud target --cf
  ibmcloud cf push
