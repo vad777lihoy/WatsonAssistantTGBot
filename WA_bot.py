@@ -108,7 +108,16 @@ def wa_reply(update, context):
             elif response_part['response_type'] == 'option':
                 reply_text += response_part['title']
                 labels = [option['label'] for option in response_part['options']]
-
+            elif response_part['response_type'] == 'suggestion':
+                reply_text += response_part['title']
+                labels = [suggestion['label'] for suggestion in response_part['suggestions']]
+                intents = [suggestion['value']['input']['intents'] for suggestion in response_part['suggestions']]
+                confs = [float(intent[0]['confidence']) for intent in intents if intent != []]
+                labels_confs = [(label, conf) for label, conf in zip(labels, confs)]
+                labels_confs = sorted(labels_confs, key = lambda x: x[1], reverse=True) 
+                labels = [label_conf[0] for label_conf in labels_confs]
+            else:
+                reply_text += "Я вас не понял. Попробуйте пожалуйста перефразировать вопрос и я очень постараюсь вас понять."
         button_list = [[s] for s in labels]
     except IndexError:
         reply_text = 'Watson Assistant is unavailable now :('
@@ -119,6 +128,7 @@ def wa_reply(update, context):
         reply_markup = ReplyKeyboardMarkup(button_list)
     else:
         reply_markup = ReplyKeyboardRemove()
+    
     context.bot.send_message(chat_id=update.effective_chat.id, text=reply_text, reply_markup=reply_markup)
 
 
