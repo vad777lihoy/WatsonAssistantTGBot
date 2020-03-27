@@ -12,6 +12,8 @@ from telegram.chataction import ChatAction
 from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
 from ibm_cloud_sdk_core.api_exception import ApiException
 
+SAVED_INTENT = None
+
 # REQUEST_KWARGS = {
 #     'proxy_url': 'socks5://orbtl.s5.opennetwork.cc:999/',
 #     # Optional, if you need authentication:
@@ -41,11 +43,12 @@ service.set_service_url(os.getenv('URL'))
 
 session_ids = {}
 
-updater = Updater(token=os.getenv('TOKEN'), use_context=True, request_kwargs=REQUEST_KWARGS)
+updater = Updater(token=os.getenv('TOKEN'), use_context=True)  # , request_kwargs=REQUEST_KWARGS
 dispatcher = updater.dispatcher
 
 
 def parse_response(response):
+    global SAVED_INTENT
     reply_text = ''
     labels = []
     button_list = []
@@ -64,6 +67,10 @@ def parse_response(response):
                 labels_confs = [(label, conf) for label, conf in zip(labels, confs)]
                 labels_confs = sorted(labels_confs, key=lambda x: x[1], reverse=True)
                 labels = [label_conf[0] for label_conf in labels_confs]
+
+                if 'intents' in response['output'].keys():
+                    if len(response['output']['intents']) > 0:
+                        SAVED_INTENT = response['output']['intents'][0]['intent']
             else:
                 reply_text += "Я вас не понял. Попробуйте пожалуйста перефразировать вопрос и я очень постараюсь вас " \
                               "понять. "
@@ -123,14 +130,20 @@ def help_user(update, context):
 
 @send_action(ChatAction.TYPING)
 def wa_reply(update, context):
+    global SAVED_INTENT
     user_id = update.message.from_user.id
     if user_id not in session_ids:
         new_session(user_id)
     try:
+        resp_input = {'text': update.message.text}
+        if SAVED_INTENT is not None:
+            resp_input = {'text': update.message.text, 'intents': [{'intent': SAVED_INTENT, 'confidence': 1.}]}
+            SAVED_INTENT = None
+
         response = service.message(
             assistant_id,
             session_ids[user_id],
-            input={'text': update.message.text},
+            input=resp_input,
         ).get_result()
         with open('log.json', 'w') as f:
             f.write(str(json.dumps(response, indent=4, ensure_ascii=False, )))
