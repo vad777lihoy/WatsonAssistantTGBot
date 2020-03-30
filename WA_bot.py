@@ -15,7 +15,7 @@ from ibm_cloud_sdk_core.api_exception import ApiException
 SAVED_INTENT = None
 
 # REQUEST_KWARGS = {
-#     'proxy_url': 'socks5://orbtl.s5.opennetwork.cc:999/',
+#     'proxy_url': 'socks5://grsst.s5.opennetwork.cc:999/',
 #     # Optional, if you need authentication:
 #     'urllib3_proxy_kwargs': {
 #         'assert_hostname': 'False',
@@ -41,9 +41,10 @@ service = ibm_watson.AssistantV2(
 
 service.set_service_url(os.getenv('URL'))
 
-session_ids = {}
+user_data = {}
 
-updater = Updater(token=os.getenv('TOKEN'), use_context=True)  # , request_kwargs=REQUEST_KWARGS
+# updater = Updater(token=os.getenv('TOKEN'), use_context=True, request_kwargs=REQUEST_KWARGS)
+updater = Updater(token=os.getenv('TOKEN'), use_context=True)
 dispatcher = updater.dispatcher
 
 
@@ -58,12 +59,13 @@ def parse_response(response):
                 reply_text += response_part['text'] + '\n'
             elif response_part['response_type'] == 'option':
                 reply_text += response_part['title']
+                reply_text += '\n' + response_part['description']
                 labels = [option['label'] for option in response_part['options']]
             elif response_part['response_type'] == 'suggestion':
                 reply_text += response_part['title']
                 labels = [suggestion['label'] for suggestion in response_part['suggestions']]
                 intents = [suggestion['value']['input']['intents'] for suggestion in response_part['suggestions']]
-                confs = [float(intent[0]['confidence']) for intent in intents if intent != []]
+                confs = [float(intent[0]['confidence']) if intent != [] else 0 for intent in intents]
                 labels_confs = [(label, conf) for label, conf in zip(labels, confs)]
                 labels_confs = sorted(labels_confs, key=lambda x: x[1], reverse=True)
                 labels = [label_conf[0] for label_conf in labels_confs]
@@ -103,7 +105,9 @@ def new_session(user_id):
     assistant_session_id = service.create_session(
         assistant_id=assistant_id
     ).get_result()['session_id']
-    session_ids[user_id] = assistant_session_id
+    user_data[user_id] = {}
+    user_data[user_id]['session'] = assistant_session_id
+    user_data[user_id]['wa_reply'] = None
 
 
 @send_action(ChatAction.TYPING)
@@ -112,7 +116,7 @@ def start(update, context):
     new_session(user_id)
     response = service.message(
         assistant_id,
-        session_ids[user_id]
+        user_data[user_id]['session']
     ).get_result()
     with open('log.json', 'w') as f:
         f.write(str(json.dumps(response, indent=4, ensure_ascii=False, )))
@@ -132,24 +136,34 @@ def help_user(update, context):
 def wa_reply(update, context):
     global SAVED_INTENT
     user_id = update.message.from_user.id
-    if user_id not in session_ids:
+    if user_id not in user_data:
         new_session(user_id)
-    try:
-        resp_input = {'text': update.message.text}
-        if SAVED_INTENT is not None:
-            resp_input = {'text': update.message.text, 'intents': [{'intent': SAVED_INTENT, 'confidence': 1.}]}
-            SAVED_INTENT = None
+    resp_input = {'text': update.message.text}
+    if user_data[user_id]['wa_reply'] is not None:
+        for suggestion in user_data[user_id]['wa_reply']:
+            if update.message.text == suggestion['label'] and suggestion['value']['input']['intents'] != []:
+                resp_input = {'text': update.message.text,
+                              'intents': [
+                                  {'intent': suggestion['value']['input']['intents'][0]['intent'], 'confidence': 1.}]}
+        user_data[user_id]['wa_reply'] = None
 
+    try:
+        # if SAVED_INTENT is not None:
+        #     resp_input = {'text': update.message.text, 'intents': [{'intent': SAVED_INTENT, 'confidence': 1.}]}
+        #     SAVED_INTENT = None
         response = service.message(
             assistant_id,
-            session_ids[user_id],
+            user_data[user_id]['session'],
             input=resp_input,
         ).get_result()
+        if response['output']['generic'][0]['response_type'] == 'suggestion':
+            user_data[user_id]['wa_reply'] = response['output']['generic'][0]['suggestions']
         with open('log.json', 'w') as f:
             f.write(str(json.dumps(response, indent=4, ensure_ascii=False, )))
     except ApiException:
         new_session(user_id)
-        response = service.message(assistant_id, session_ids[user_id], input={'text': update.message.text}).get_result()
+        response = service.message(assistant_id, user_data[user_id]['session'],
+                                   input={'text': update.message.text}).get_result()
 
     logger.debug(response)
     reply_text, reply_markup = parse_response(response)
