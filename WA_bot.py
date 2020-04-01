@@ -2,12 +2,13 @@ import os
 import logging
 import ibm_watson
 import json
+from datetime import datetime
 from functools import wraps
 from dotenv import load_dotenv
 from telegram.ext import CommandHandler
 from telegram.ext import MessageHandler, Filters
-from telegram.ext import Updater
-from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram.ext import Updater, CallbackQueryHandler
+from telegram import ReplyKeyboardMarkup, ReplyMarkup, InlineKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton
 from telegram.chataction import ChatAction
 from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
 from ibm_cloud_sdk_core.api_exception import ApiException
@@ -41,12 +42,20 @@ service = ibm_watson.AssistantV2(
 
 service.set_service_url(os.getenv('URL'))
 
+#Emoji
+heart_icon = u'\U00002764'
+dislike_icon = u'\U0001F44E'
+
+feedback_button_list = [[
+    InlineKeyboardButton(heart_icon, callback_data='like'),
+    InlineKeyboardButton(dislike_icon, callback_data='dislike')
+]]
+
 user_data = {}
 
 # updater = Updater(token=os.getenv('TOKEN'), use_context=True, request_kwargs=REQUEST_KWARGS)
 updater = Updater(token=os.getenv('TOKEN'), use_context=True)
 dispatcher = updater.dispatcher
-
 
 def parse_response(response):
     global SAVED_INTENT
@@ -69,13 +78,14 @@ def parse_response(response):
                 labels_confs = [(label, conf) for label, conf in zip(labels, confs)]
                 labels_confs = sorted(labels_confs, key=lambda x: x[1], reverse=True)
                 labels = [label_conf[0] for label_conf in labels_confs]
-
-                if 'intents' in response['output'].keys():
-                    if len(response['output']['intents']) > 0:
-                        SAVED_INTENT = response['output']['intents'][0]['intent']
             else:
                 reply_text += "Я вас не понял. Попробуйте пожалуйста перефразировать вопрос и я очень постараюсь вас " \
                               "понять. "
+
+            if 'intents' in response['output'].keys():
+                if len(response['output']['intents']) > 0:
+                    SAVED_INTENT = response['output']['intents'][0]['intent']
+
         button_list = [[s] for s in labels]
     except IndexError:
         reply_text = 'Watson Assistant is unavailable now :('
@@ -83,9 +93,9 @@ def parse_response(response):
         reply_text = 'Ошибка обработки текста'
 
     if len(button_list) > 0:
-        reply_markup = ReplyKeyboardMarkup(button_list)
+        reply_markup = ReplyKeyboardMarkup(button_list, one_time_keyboard=True)
     else:
-        reply_markup = ReplyKeyboardRemove()
+        reply_markup = InlineKeyboardMarkup(feedback_button_list)
     return reply_text, reply_markup
 
 
@@ -136,9 +146,13 @@ def help_user(update, context):
 def wa_reply(update, context):
     global SAVED_INTENT
     user_id = update.message.from_user.id
+    input_text = update.message.text
+
     if user_id not in user_data:
         new_session(user_id)
-    resp_input = {'text': update.message.text}
+    resp_input = {'text': input_text}
+
+    user_data[user_id]['input'] = input_text
     if user_data[user_id]['wa_reply'] is not None:
         for suggestion in user_data[user_id]['wa_reply']:
             if update.message.text == suggestion['label'] and suggestion['value']['input']['intents'] != []:
@@ -173,6 +187,35 @@ def wa_reply(update, context):
 def unknown(update, context):
     context.bot.send_message(chat_id=update.effective_chat.id, text="Sorry, I didn't understand that command.")
 
+def feedback_callback(update, context):
+    global SAVED_INTENT
+    query = update.callback_query
+    user_id = query.from_user.id
+
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    full_name = query.from_user.full_name
+    text = query.message.text
+
+    feedback_obj = {
+        'timestamp': timestamp,
+        'full_name': full_name,
+        'user_input': user_data[user_id]['input'],
+        'wa_reply': text,
+        'intent': SAVED_INTENT,
+        'feedback': query.data,
+    }
+
+    with open('feedback.json', 'r+') as f:
+        current_obj = f.read()
+        if len(current_obj) > 0:
+            obj = json.loads(current_obj)
+            obj.append(feedback_obj)
+            f.seek(0)
+            f.truncate(0)
+            f.write(json.dumps(obj, indent=4, ensure_ascii=False))
+        else:
+            f.write(json.dumps([feedback_obj], indent=4, ensure_ascii=False))
+        f.close()
 
 start_handler = CommandHandler('start', start)
 dispatcher.add_handler(start_handler)
@@ -185,5 +228,7 @@ dispatcher.add_handler(unknown_handler)
 
 message_handler = MessageHandler(Filters.text, wa_reply)
 dispatcher.add_handler(message_handler)
+
+dispatcher.add_handler(CallbackQueryHandler(feedback_callback))
 
 updater.start_polling()
