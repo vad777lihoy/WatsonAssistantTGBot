@@ -1,6 +1,7 @@
 import os
 import logging
 import ibm_watson
+import httplib2
 import json
 from datetime import datetime
 from functools import wraps
@@ -12,8 +13,71 @@ from telegram import ReplyKeyboardMarkup, ReplyMarkup, InlineKeyboardMarkup, Rep
 from telegram.chataction import ChatAction
 from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
 from ibm_cloud_sdk_core.api_exception import ApiException
+from  googleapiclient.discovery import build
+from oauth2client.service_account import ServiceAccountCredentials
 
 SAVED_INTENT = None
+
+# Google Sheets config
+SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+SHEET_ID = '0'
+SPREADSHEET_ID = '19Ql673P0DGGIllL-S-t-UmqazfskTzUg9k8iWJIyX4c'
+CREDENTIALS_FILE = 'credentials.json'
+SHEET_UPDATER_TRIGGER_ROW_COUNT = 20
+
+# .env params
+load_dotenv()
+assistant_id = os.getenv('ASSISTANT_ID')
+apikey = os.getenv('APIKEY')
+token = os.getenv('TOKEN')
+url = os.getenv('URL')
+
+# Emoji
+heart_icon = u'\U00002764'
+dislike_icon = u'\U0001F44E'
+
+# Logging config
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                    level=logging.INFO)
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
+
+# Google Sheets auth
+credentials = ServiceAccountCredentials.from_json_keyfile_name(
+    CREDENTIALS_FILE,
+    [
+        'https://www.googleapis.com/auth/spreadsheets',
+        'https://www.googleapis.com/auth/drive'
+    ]
+)
+httpAuth = credentials.authorize(httplib2.Http())
+
+google_sheets_service = build('sheets', 'v4', http = httpAuth)
+
+batch_update_spreadsheet_request_body = {
+    'requests': {
+        'appendCells': {
+            'sheetId': SHEET_ID,
+            'rows': [],
+            'fields': '*'
+        }
+    },
+}
+
+# Watson Assistant auth
+authenticator = IAMAuthenticator(apikey)
+service = ibm_watson.AssistantV2(
+    version='2019-02-28',
+    authenticator=authenticator)
+
+service.set_service_url(url)
+
+feedback_button_list = [[
+    InlineKeyboardButton(heart_icon, callback_data='like'),
+    InlineKeyboardButton(dislike_icon, callback_data='dislike')
+]]
+
+user_data = {}
 
 # REQUEST_KWARGS = {
 #     'proxy_url': 'socks5://grsst.s5.opennetwork.cc:999/',
@@ -25,37 +89,16 @@ SAVED_INTENT = None
 #         'password': 'xupI2fev'
 #     }
 # }
-
-load_dotenv()
-assistant_id = os.getenv('ASSISTANT_ID')
-apikey = os.getenv('APIKEY')
-
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                    level=logging.INFO)
-logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
-
-authenticator = IAMAuthenticator(apikey)
-service = ibm_watson.AssistantV2(
-    version='2019-02-28',
-    authenticator=authenticator)
-
-service.set_service_url(os.getenv('URL'))
-
-#Emoji
-heart_icon = u'\U00002764'
-dislike_icon = u'\U0001F44E'
-
-feedback_button_list = [[
-    InlineKeyboardButton(heart_icon, callback_data='like'),
-    InlineKeyboardButton(dislike_icon, callback_data='dislike')
-]]
-
-user_data = {}
-
-# updater = Updater(token=os.getenv('TOKEN'), use_context=True, request_kwargs=REQUEST_KWARGS)
-updater = Updater(token=os.getenv('TOKEN'), use_context=True)
+# updater = Updater(token=token, use_context=True, request_kwargs=REQUEST_KWARGS)
+updater = Updater(token=token, use_context=True)
 dispatcher = updater.dispatcher
+
+def returnCellData(s):
+    return {
+        'userEnteredValue': {
+            'stringValue': s
+        },
+    }
 
 def parse_response(response):
     global SAVED_INTENT
@@ -195,27 +238,26 @@ def feedback_callback(update, context):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     full_name = query.from_user.full_name
     text = query.message.text
+    user_input = None
 
-    feedback_obj = {
-        'timestamp': timestamp,
-        'full_name': full_name,
-        'user_input': user_data[user_id]['input'],
-        'wa_reply': text,
-        'intent': SAVED_INTENT,
-        'feedback': query.data,
-    }
+    if ('user_id' in user_data.keys() and 'input' in user_data[user_id].keys()):
+        user_input = user_data[user_id]['input']
 
-    with open('feedback.json', 'r+') as f:
-        current_obj = f.read()
-        if len(current_obj) > 0:
-            obj = json.loads(current_obj)
-            obj.append(feedback_obj)
-            f.seek(0)
-            f.truncate(0)
-            f.write(json.dumps(obj, indent=4, ensure_ascii=False))
-        else:
-            f.write(json.dumps([feedback_obj], indent=4, ensure_ascii=False))
-        f.close()
+    batch_update_spreadsheet_request_body['requests']['appendCells']['rows'].append({
+        'values': [
+            returnCellData(timestamp),
+            returnCellData(full_name),
+            returnCellData(user_input),
+            returnCellData(text),
+            returnCellData(SAVED_INTENT),
+            returnCellData(query.data)
+        ]
+    })
+
+    if (len(batch_update_spreadsheet_request_body['requests']['appendCells']['rows']) > SHEET_UPDATER_TRIGGER_ROW_COUNT):
+        #pylint: disable=no-member
+        google_sheets_service.spreadsheets().batchUpdate(spreadsheetId=SPREADSHEET_ID, body=batch_update_spreadsheet_request_body).execute()
+        batch_update_spreadsheet_request_body['requests']['appendCells']['rows'] = []
 
 start_handler = CommandHandler('start', start)
 dispatcher.add_handler(start_handler)
