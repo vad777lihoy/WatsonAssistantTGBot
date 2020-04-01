@@ -23,7 +23,6 @@ SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 SHEET_ID = '0'
 SPREADSHEET_ID = '19Ql673P0DGGIllL-S-t-UmqazfskTzUg9k8iWJIyX4c'
 CREDENTIALS_FILE = 'credentials.json'
-SHEET_UPDATER_TRIGGER_ROW_COUNT = 20
 
 # .env params
 load_dotenv()
@@ -254,10 +253,9 @@ def feedback_callback(update, context):
         ]
     })
 
-    if (len(batch_update_spreadsheet_request_body['requests']['appendCells']['rows']) > SHEET_UPDATER_TRIGGER_ROW_COUNT):
-        #pylint: disable=no-member
-        google_sheets_service.spreadsheets().batchUpdate(spreadsheetId=SPREADSHEET_ID, body=batch_update_spreadsheet_request_body).execute()
-        batch_update_spreadsheet_request_body['requests']['appendCells']['rows'] = []
+    #pylint: disable=no-member
+    google_sheets_service.spreadsheets().batchUpdate(spreadsheetId=SPREADSHEET_ID, body=batch_update_spreadsheet_request_body).execute()
+    batch_update_spreadsheet_request_body['requests']['appendCells']['rows'] = []
 
 start_handler = CommandHandler('start', start)
 dispatcher.add_handler(start_handler)
