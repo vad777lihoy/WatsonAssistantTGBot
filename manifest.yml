@@ -1,6 +1,6 @@
 ---
 applications:
- - name: WABankingBot
+ - name: Corona-bot
    random-route: true
    memory: 128M
    command: python3 WA_bot.py
