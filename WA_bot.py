@@ -99,6 +99,9 @@ def returnCellData(s):
         },
     }
 
+def intentsToString(intent):
+    return intent['intent']
+
 def parse_response(response):
     # global SAVED_INTENT
     reply_text = ''
@@ -128,10 +131,6 @@ def parse_response(response):
             else:
                 reply_text += "Я вас не понял. Попробуйте пожалуйста перефразировать вопрос и я очень постараюсь вас " \
                               "понять. "
-
-            if 'intents' in response['output'].keys():
-                if len(response['output']['intents']) > 0:
-                    SAVED_INTENT = response['output']['intents'][0]['intent']
 
         button_list = [[s] for s in labels]
     except IndexError:
@@ -217,6 +216,8 @@ def wa_reply(update, context):
             user_data[user_id]['session'],
             input=resp_input,
         ).get_result()
+        if ('intents' in response['output'].keys() and len(response['output']['intents']) > 0):
+            user_data[user_id]['intent'] = ', '.join(map(intentsToString, response['output']['intents']))
         if response['output']['generic'][0]['response_type'] == 'suggestion':
             user_data[user_id]['wa_reply'] = response['output']['generic'][0]['suggestions']
         with open('log.json', 'w') as f:
@@ -235,7 +236,6 @@ def unknown(update, context):
     context.bot.send_message(chat_id=update.effective_chat.id, text="Sorry, I didn't understand that command.")
 
 def feedback_callback(update, context):
-    global SAVED_INTENT
     query = update.callback_query
     user_id = query.from_user.id
 
@@ -243,9 +243,13 @@ def feedback_callback(update, context):
     full_name = query.from_user.full_name
     text = query.message.text
     user_input = None
+    user_intent = None
 
     if (user_id in user_data.keys() and 'input' in user_data[user_id].keys()):
         user_input = user_data[user_id]['input']
+
+    if (user_id in user_data.keys() and 'intent' in user_data[user_id].keys()):
+        user_input = user_data[user_id]['intent']
 
     batch_update_spreadsheet_request_body['requests']['appendCells']['rows'].append({
         'values': [
@@ -253,7 +257,7 @@ def feedback_callback(update, context):
             returnCellData(full_name),
             returnCellData(user_input),
             returnCellData(text),
-            returnCellData(SAVED_INTENT),
+            returnCellData(user_intent),
             returnCellData(query.data)
         ]
     })
