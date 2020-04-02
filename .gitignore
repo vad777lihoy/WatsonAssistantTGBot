@@ -1,5 +1,7 @@
 .env
-log.json
-
+.vscode
 .idea
+
+credentials.json
+log.json
 venv

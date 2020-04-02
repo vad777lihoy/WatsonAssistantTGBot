@@ -2,3 +2,5 @@ python-telegram-bot
 ibm_watson
 python-dotenv
 pycbrf
+oauth2client
+google-api-python-client
