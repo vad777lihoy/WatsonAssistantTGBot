@@ -12,7 +12,7 @@ from telegram.chataction import ChatAction
 from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
 from ibm_cloud_sdk_core.api_exception import ApiException
 
-SAVED_INTENT = None
+# SAVED_INTENT = None
 
 # REQUEST_KWARGS = {
 #     'proxy_url': 'socks5://grsst.s5.opennetwork.cc:999/',
@@ -49,7 +49,7 @@ dispatcher = updater.dispatcher
 
 
 def parse_response(response):
-    global SAVED_INTENT
+    # global SAVED_INTENT
     reply_text = ''
     labels = []
     button_list = []
@@ -135,7 +135,7 @@ def help_user(update, context):
 
 @send_action(ChatAction.TYPING)
 def wa_reply(update, context):
-    global SAVED_INTENT
+    # global SAVED_INTENT
     user_id = update.message.from_user.id
     if user_id not in user_data:
         new_session(user_id)

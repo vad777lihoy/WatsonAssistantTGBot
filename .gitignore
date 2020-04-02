@@ -1,2 +1,5 @@
 .env
 log.json
+
+.idea
+venv
