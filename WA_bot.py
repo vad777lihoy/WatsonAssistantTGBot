@@ -239,7 +239,7 @@ def feedback_callback(update, context):
     text = query.message.text
     user_input = None
 
-    if ('user_id' in user_data.keys() and 'input' in user_data[user_id].keys()):
+    if (user_id in user_data.keys() and 'input' in user_data[user_id].keys()):
         user_input = user_data[user_id]['input']
 
     batch_update_spreadsheet_request_body['requests']['appendCells']['rows'].append({

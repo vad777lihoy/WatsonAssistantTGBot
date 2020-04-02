@@ -1,0 +1,12 @@
+{
+    "output": {
+        "generic": [
+            {
+                "response_type": "text",
+                "text": "Я Вас не понял. Перефразируйте, пожалуйста."
+            }
+        ],
+        "intents": [],
+        "entities": []
+    }
+}
