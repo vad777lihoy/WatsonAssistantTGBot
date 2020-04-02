@@ -1,4 +1,7 @@
 .env
 .vscode
+.idea
 
 credentials.json
+log.json
+venv

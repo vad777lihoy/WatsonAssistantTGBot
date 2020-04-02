@@ -16,7 +16,7 @@ from ibm_cloud_sdk_core.api_exception import ApiException
 from  googleapiclient.discovery import build
 from oauth2client.service_account import ServiceAccountCredentials
 
-SAVED_INTENT = None
+# SAVED_INTENT = None
 
 # Google Sheets config
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
@@ -100,7 +100,7 @@ def returnCellData(s):
     }
 
 def parse_response(response):
-    global SAVED_INTENT
+    # global SAVED_INTENT
     reply_text = ''
     labels = []
     button_list = []
@@ -110,7 +110,8 @@ def parse_response(response):
                 reply_text += response_part['text'] + '\n'
             elif response_part['response_type'] == 'option':
                 reply_text += response_part['title']
-                reply_text += '\n' + response_part['description']
+                if 'description' in response_part:
+                    reply_text += '\n' + response_part['description']
                 labels = [option['label'] for option in response_part['options']]
             elif response_part['response_type'] == 'suggestion':
                 reply_text += response_part['title']
@@ -120,6 +121,10 @@ def parse_response(response):
                 labels_confs = [(label, conf) for label, conf in zip(labels, confs)]
                 labels_confs = sorted(labels_confs, key=lambda x: x[1], reverse=True)
                 labels = [label_conf[0] for label_conf in labels_confs]
+
+                # if 'intents' in response['output'].keys():
+                #     if len(response['output']['intents']) > 0:
+                #         SAVED_INTENT = response['output']['intents'][0]['intent']
             else:
                 reply_text += "Я вас не понял. Попробуйте пожалуйста перефразировать вопрос и я очень постараюсь вас " \
                               "понять. "
@@ -186,7 +191,7 @@ def help_user(update, context):
 
 @send_action(ChatAction.TYPING)
 def wa_reply(update, context):
-    global SAVED_INTENT
+    # global SAVED_INTENT
     user_id = update.message.from_user.id
     input_text = update.message.text
 
