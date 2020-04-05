@@ -32,8 +32,8 @@ token = os.getenv('TOKEN')
 url = os.getenv('URL')
 
 # Emoji
-heart_icon = u'\U00002764'
-dislike_icon = u'\U0001F44E'
+heart_icon = 'Спасибо, бот!'
+dislike_icon = 'Неточный ответ'
 
 # Logging config
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
