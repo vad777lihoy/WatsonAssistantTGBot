@@ -72,8 +72,8 @@ service = ibm_watson.AssistantV2(
 service.set_service_url(url)
 
 feedback_button_list = [[
-    InlineKeyboardButton(heart_icon, callback_data='like'),
-    InlineKeyboardButton(dislike_icon, callback_data='dislike')
+    InlineKeyboardButton(heart_icon, callback_data='Ответ был полезен'),
+    InlineKeyboardButton(dislike_icon, callback_data='Ответ был неполезен')
 ]]
 
 user_data = {}
@@ -249,7 +249,7 @@ def feedback_callback(update, context):
         user_input = user_data[user_id]['input']
 
     if (user_id in user_data.keys() and 'intent' in user_data[user_id].keys()):
-        user_input = user_data[user_id]['intent']
+        user_intent = user_data[user_id]['intent']
 
     batch_update_spreadsheet_request_body['requests']['appendCells']['rows'].append({
         'values': [
